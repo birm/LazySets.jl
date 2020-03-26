@@ -1547,12 +1547,14 @@ directions ``d_k`` in `dir` presented in [1, Section 4.2] (adapting the notation
 to the one used in this library).
 
 ```math
-    \\min \\sum_{k=1}^l c_k \\
+    \\min \\sum_{k=1}^l α_k \\
     s.t. \\
-    \\text{center} + \\sum_{k=1}^l b_{kj} * d_k = v_j \\quad \\forall j \\
-    -c_k ≤ b_{kj} ≤ c_k \\quad \\forall k, j \\
-    c_k ≥ 0 \\quad \\forall k, j \\
+    c + \\sum_{k=1}^l b_{kj} * d_k = v_j \\quad \\forall j \\
+    -α_k ≤ b_{kj} ≤ α_k \\quad \\forall k, j \\
+    α_k ≥ 0 \\quad \\forall k
 ```
+
+The resulting zonotope has center `c` and generators `α_k · d_k`.
 
 Note that the first type of side constraints is vector-based and that the
 nonnegativity constraints (last type) are not stated explicitly in [1].
@@ -1580,7 +1582,7 @@ function overapproximate(X::LazySet{N}, ::Type{<:Zonotope},
     l = length(dirs)
     V = vertices_list(X)
     m = length(V)
-    nvariables = l + n + l * m  # l 'c_k' + n 'p[i]' + lm 'b_lj'
+    nvariables = l + n + l * m  # l 'α_k' + n 'p[i]' + lm 'b_lj'
     nconstraints = n * m + 2 * l * m  # nm 'p_j' + 2lm 'b_kj'
 
     obj = vcat(ones(l), zeros(nvariables - l))
@@ -1602,12 +1604,12 @@ function overapproximate(X::LazySet{N}, ::Type{<:Zonotope},
         end
         col_offset_b += 1
     end
-    # constraints -c_k ± b_kj <= 0
+    # constraints -α_k ± b_kj <= 0
     col_offset_b = l + n
     for k in 1:l
         for j in 1:m
             for sign_b in N[1, -1]
-                A[r, k] = N(-1)  # - c_k
+                A[r, k] = N(-1)  # - α_k
                 A[r, col_offset_b + j] = sign_b  # ± b_kj
                 r += 1
             end
@@ -1620,11 +1622,11 @@ function overapproximate(X::LazySet{N}, ::Type{<:Zonotope},
     if lp.status != :Optimal
         error("got unexpected status from LP solver: $(lp.status)")
     end
-    center = lp.sol[(col_offset_p+1):(col_offset_p+n)]
+    c = lp.sol[(col_offset_p+1):(col_offset_p+n)]
     ck = lp.sol[1:l]
     G = Matrix{N}(undef, n, l)
     for (j, dj) in enumerate(dirs)
         G[:, j] = ck[j] * dj
     end
-    return Zonotope(center, G)
+    return Zonotope(c, G)
 end
